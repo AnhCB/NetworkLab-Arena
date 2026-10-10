@@ -2,8 +2,19 @@
 layout: default
 title: "NetworkLab Arena"
 description: "A Multiplayer Aim Trainer for Studying Network Latency and Netcode Synchronization"
+theme: jekyll-theme-cayman
 ---
-
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['$$', '$$']]
+    }
+  };
+</script>
+<script defer
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+</script>
 # NetworkLab Arena
 
 ### A Multiplayer Aim Trainer for Studying Network Latency and Netcode Synchronization
