@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetworkLab Arena — CSC 466</title>
+<style>
+:root { --bg:#0b1020; --panel:#121a2d; --panel2:#18233b; --text:#e9f0ff; --muted:#9aaaca; --cyan:#59d9ff; --pink:#ff6b9d; --green:#8be9a8; --yellow:#ffd166; }
+* { box-sizing:border-box; }
+body { margin:0; background:radial-gradient(ellipse at top,#172747 0%,var(--bg) 58%); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+.wrap { max-width:1200px; margin:auto; padding:24px; }
+header { display:flex; justify-content:space-between; gap:20px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+h1 { margin:0; font-size:clamp(1.5rem,3vw,2.25rem); letter-spacing:-.04em; }
+.sub { color:var(--muted); margin-top:4px; }
+.pill { border:1px solid #344765; color:var(--cyan); padding:7px 11px; border-radius:999px; font-size:.8rem; white-space:nowrap; }
+.layout { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr); gap:16px; }
+.panel { background:rgba(18,26,45,.94); border:1px solid #263652; border-radius:16px; padding:16px; box-shadow:0 14px 40px #0003; }
+.gamehead { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.gamehead h2,.panel h2 { margin:0; font-size:1rem; }
+.small { color:var(--muted); font-size:.82rem; }
+canvas { width:100%; display:block; background:#08101e; border:1px solid #263652; border-radius:12px; cursor:crosshair; aspect-ratio:16/9; }
+.controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+button,select,input { background:#202e49; color:var(--text); border:1px solid #3a4d6e; border-radius:9px; padding:9px 11px; font:inherit; }
+button { cursor:pointer; font-weight:650; }
+button:hover { background:#2b3d5e; }
+button.primary { background:#087fa1; border-color:#2cbde0; }
+button:disabled { opacity:.45; cursor:not-allowed; }
+.stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+.stat { background:#0e1729; border:1px solid #263652; border-radius:11px; padding:12px; }
+.stat .label { color:var(--muted); font-size:.78rem; }
+.stat .value { font-size:1.4rem; font-weight:750; margin-top:3px; }
+.metric { color:var(--cyan); }
+.settings { display:grid; gap:13px; margin-top:12px; }
+.field { display:grid; gap:6px; }
+.field label { font-size:.84rem; color:#c8d5ee; display:flex; justify-content:space-between; gap:10px; }
+input[type=range] { width:100%; padding:0; accent-color:var(--cyan); }
+.modeinfo { padding:12px; background:#0e1729; border-radius:10px; border-left:3px solid var(--cyan); color:#c5d4ef; font-size:.86rem; }
+.modeinfo strong { color:var(--text); }
+.legend { display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:.8rem; margin-top:10px; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+.log { margin-top:12px; background:#0a1221; border:1px solid #263652; border-radius:10px; padding:10px; max-height:130px; overflow:auto; font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; color:#b8c9e7; }
+.tablewrap { overflow-x:auto; margin-top:12px; }
+table { width:100%; border-collapse:collapse; font-size:.83rem; }
+th,td { text-align:left; padding:9px 7px; border-bottom:1px solid #28364f; }
+th { color:var(--muted); font-weight:600; }
+.notice { margin-top:16px; color:#aab9d5; font-size:.82rem; }
+.notice strong { color:var(--yellow); }
+@media(max-width:850px){ .layout{grid-template-columns:1fr;} .wrap{padding:14px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>NetworkLab <span style="color:var(--cyan)">Arena</span></h1>
+    <div class="sub">CSC 466 · Multiplayer networking experiment prototype</div>
+  </div>
+  <div class="pill">60 Hz target tick · 1 s history buffer</div>
+</header>
+
+<div class="layout">
+  <section class="panel">
+    <div class="gamehead">
+      <div><h2>Aim trainer</h2><div class="small">Click the moving target to record a shot</div></div>
+      <div class="small" id="status">Ready</div>
+    </div>
+    <canvas id="game" width="960" height="540" aria-label="Aim trainer game area"></canvas>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--pink)"></i>Target as rendered</span>
+      <span><i class="dot" style="background:var(--cyan)"></i>Server target</span>
+      <span><i class="dot" style="background:var(--green)"></i>Hit registered</span>
+    </div>
+    <div class="controls">
+      <button class="primary" id="startBtn">Start / Resume</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="resetBtn">Reset round</button>
+      <button id="exportBtn">Export CSV</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="label">Shots</div><div class="value" id="shots">0</div></div>
+      <div class="stat"><div class="label">Registered hits</div><div class="value" id="hits">0</div></div>
+      <div class="stat"><div class="label">Mean spatial error Δpx</div><div class="value metric" id="meanError">—</div></div>
+      <div class="stat"><div class="label">Server tick jitter σΔt</div><div class="value metric" id="jitter">—</div></div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <h2>Experiment controls</h2>
+    <div class="settings">
+      <div class="field">
+        <label for="mode">Netcode mode</label>
+        <select id="mode">
+          <option value="plain">Uncompensated server</option>
+          <option value="rewind">Lag-compensated rewind</option>
+        </select>
+      </div>
+      <div class="modeinfo" id="modeInfo"><strong>Uncompensated:</strong> validate the shot against the server target position when the simulated packet arrives.</div>
+      <div class="field">
+        <label for="latency">Simulated one-way delay <span id="latencyVal">75 ms</span></label>
+        <input id="latency" type="range" min="0" max="150" step="5" value="75">
+      </div>
+      <div class="field">
+        <label for="jitterRange">Random jitter ± <span id="jitterVal">15 ms</span></label>
+        <input id="jitterRange" type="range" min="0" max="30" step="1" value="15">
+      </div>
+      <div class="field">
+        <label for="loss">Packet drop probability <span id="lossVal">2%</span></label>
+        <input id="loss" type="range" min="0" max="10" step="1" value="2">
+      </div>
+      <div class="field">
+        <label for="speed">Target speed <span id="speedVal">1.0×</span></label>
+        <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1">
+      </div>
+      <div class="field">
+        <label for="radius">Target radius <span id="radiusVal">22 px</span></label>
+        <input id="radius" type="range" min="12" max="34" step="1" value="22">
+      </div>
+      <button id="clearBtn">Clear experiment measurements</button>
+    </div>
+    <div class="tablewrap">
+      <h2>Latest shot events</h2>
+      <table>
+        <thead><tr><th>Mode</th><th>Delay</th><th>Error</th><th>Result</th></tr></thead>
+        <tbody id="shotTable"><tr><td colspan="4" class="small">No shots yet</td></tr></tbody>
+      </table>
+    </div>
+    <div class="log" id="log" aria-live="polite">[init] Browser prototype loaded.<br>[info] Metrics are collected locally in this page.</div>
+  </aside>
+</div>
+<div class="notice"><strong>Prototype limitation:</strong> this page simulates packet delay, jitter, packet loss, server ticks, and rewind logic inside one browser. It is not yet a real multiplayer Node.js/WebSocket server and does not invoke Linux <code>tc/netem</code>. Use it for UI/gameplay demonstrations, not as evidence of actual network-emulation results.</div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const state = {
+    running:false, lastFrame:0, lastTick:performance.now(), tickIntervals:[],
+    server:{x:480,y:270}, rendered:{x:480,y:270}, target:{x:480,y:270},
+    t:0, shots:[], events:[], totalShots:0, hits:0, errors:[],
+    history:[], maxHistoryMs:1000, lastTickAt:performance.now(), tickTimer:0,
+    flashes:[], pending:[], tickCount:0
+  };
+  const settings = () => ({
+    mode:$('mode').value, latency:+$('latency').value, jitter:+$('jitterRange').value,
+    loss:+$('loss').value/100, speed:+$('speed').value, radius:+$('radius').value
+  });
+  const W=canvas.width,H=canvas.height;
+  function log(msg){
+    const el=$('log'); const time=new Date().toLocaleTimeString();
+    el.innerHTML = `<div>[${time}] ${escapeHtml(msg)}</div>` + el.innerHTML;
+    while(el.children.length>30) el.removeChild(el.lastChild);
+  }
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function randDelay(s){return Math.max(0,s.latency+(Math.random()*2-1)*s.jitter);}
+  function targetAt(time){
+    // Deterministic analytic target path, so the rewind mode can inspect past positions.
+    const s=settings(), t=time/1000;
+    return {x: W/2 + Math.sin(t*1.35*s.speed)*W*.31,
+            y: H/2 + Math.sin(t*1.93*s.speed+0.8)*H*.28};
+  }
+  function pushHistory(now){
+    const p=targetAt(now);
+    state.history.push({time:now,x:p.x,y:p.y});
+    while(state.history.length && now-state.history[0].time>state.maxHistoryMs) state.history.shift();
+    state.server=p;
+  }
+  function historicalAt(time){
+    if(!state.history.length) return targetAt(time);
+    let before=state.history[0], after=state.history[state.history.length-1];
+    for(let i=1;i<state.history.length;i++){
+      if(state.history[i].time>=time){before=state.history[i-1];after=state.history[i];break;}
+    }
+    if(time<=before.time) return before;
+    if(time>=after.time) return after;
+    const f=(time-before.time)/(after.time-before.time||1);
+    return {x:before.x+(after.x-before.x)*f,y:before.y+(after.y-before.y)*f};
+  }
+  function drawGrid(){
+    ctx.strokeStyle='#15233a'; ctx.lineWidth=1;
+    for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    ctx.strokeStyle='#223653';ctx.setLineDash([5,7]);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([]);
+  }
+  function circle(p,r,color,fill=true){
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    if(fill){ctx.fillStyle=color;ctx.fill();}else{ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();}
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);drawGrid();
+    const now=performance.now();
+    state.rendered=targetAt(now);
+    const s=settings();
+    // A ghost shows the current server-side estimate, while pink is what the client aims at.
+    circle(state.server,s.radius+7,'rgba(89,217,255,.08)');
+    circle(state.server,s.radius+7,'rgba(89,217,255,.8)',false);
+    circle(state.rendered,s.radius,'rgba(255,107,157,.18)');
+    circle(state.rendered,s.radius,'#ff6b9d',false);
+    circle(state.rendered,4,'#ff6b9d');
+    state.flashes=state.flashes.filter(f=>now-f.time<500);
+    state.flashes.forEach(f=>{
+      const alpha=1-(now-f.time)/500;
+      ctx.globalAlpha=alpha;circle(f.p,s.radius+10,'#8be9a8',false);ctx.globalAlpha=1;
+    });
+    ctx.fillStyle='#8da2c4';ctx.font='13px ui-monospace,monospace';
+    ctx.fillText(`SIM TIME ${(state.t/1000).toFixed(1)}s`,16,24);
+    ctx.fillText(`MODE: ${s.mode==='rewind'?'REWIND':'UNCOMPENSATED'}`,16,H-18);
+    requestAnimationFrame(draw);
+  }
+  function tick(now){
+    if(!state.running) return;
+    const expected=1000/60;
+    if(state.lastTickAt){state.tickIntervals.push(now-state.lastTickAt);if(state.tickIntervals.length>600)state.tickIntervals.shift();}
+    state.lastTickAt=now;state.tickCount++;
+    pushHistory(now);
+    // Events are processed after their simulated network delay.
+    const ready=state.pending.filter(e=>e.arrival<=now);
+    state.pending=state.pending.filter(e=>e.arrival>now);
+    ready.forEach(processShot);
+    updateStats();
+    state.tickTimer=setTimeout(()=>tick(performance.now()),expected);
+  }
+  function processShot(e){
+    const s=e.settings;
+    if(Math.random()<s.loss){e.result='DROPPED';e.error=null;log('Shot packet dropped by simulated loss.');}
+    else {
+      const serverPos = s.mode==='rewind' ? historicalAt(e.clickTime) : targetAt(e.arrival);
+      const dx=e.clickX-serverPos.x, dy=e.clickY-serverPos.y;
+      e.error=Math.hypot(dx,dy);
+      e.result=e.error<=s.radius?'HIT':'MISS';
+      if(e.result==='HIT'){state.hits++;state.flashes.push({p:{x:serverPos.x,y:serverPos.y},time:performance.now()});}
+      state.errors.push(e.error);
+      log(`${s.mode==='rewind'?'rewind':'uncompensated'} shot: ${e.result}, Δpx=${e.error.toFixed(1)}.`);
+    }
+    state.events.unshift(e);state.events=state.events.slice(0,8);
+    renderEvents();updateStats();
+  }
+  function onShot(ev){
+    if(!state.running)return;
+    const rect=canvas.getBoundingClientRect();
+    const x=(ev.clientX-rect.left)/rect.width*W,y=(ev.clientY-rect.top)/rect.height*H;
+    const s=settings(), now=performance.now(), delay=randDelay(s);
+    const e={mode:s.mode,delay:Math.round(delay),clickTime:now,clickX:x,clickY:y,arrival:now+delay,settings:s,result:'PENDING',error:null};
+    state.totalShots++;state.pending.push(e);updateStats();
+    log(`Shot sent; simulated one-way delay ${Math.round(delay)} ms.`);
+  }
+  function updateStats(){
+    $('shots').textContent=state.totalShots;
+    $('hits').textContent=state.hits;
+    $('meanError').textContent=state.errors.length?(state.errors.reduce((a,b)=>a+b,0)/state.errors.length).toFixed(1)+' px':'—';
+    const xs=state.tickIntervals;
+    if(xs.length>1){const mean=xs.reduce((a,b)=>a+b,0)/xs.length;const variance=xs.reduce((a,b)=>a+(b-mean)**2,0)/xs.length;$('jitter').textContent=Math.sqrt(variance).toFixed(2)+' ms';}
+    else $('jitter').textContent='—';
+  }
+  function renderEvents(){
+    const body=$('shotTable');
+    if(!state.events.length){body.innerHTML='<tr><td colspan="4" class="small">No shots yet</td></tr>';return;}
+    body.innerHTML=state.events.map(e=>`<tr><td>${e.mode==='rewind'?'Rewind':'Plain'}</td><td>${e.delay} ms</td><td>${e.error===null?'—':e.error.toFixed(1)+' px'}</td><td style="color:${e.result==='HIT'?'var(--green)':e.result==='DROPPED'?'var(--yellow)':'var(--pink)'}">${e.result}</td></tr>`).join('');
+  }
+  function start(){
+    if(state.running)return;
+    state.running=true;state.lastTickAt=performance.now();state.lastFrame=performance.now();
+    $('status').textContent='Running';log('Simulation started at nominal 60 Hz.');
+    tick(performance.now());
+  }
+  function pause(){
+    state.running=false;clearTimeout(state.tickTimer);$('status').textContent='Paused';log('Simulation paused.');
+  }
+  function reset(){
+    pause();state.t=0;state.totalShots=0;state.hits=0;state.errors=[];state.events=[];state.pending=[];state.history=[];state.tickIntervals=[];state.tickCount=0;
+    state.server=targetAt(performance.now());renderEvents();updateStats();$('status').textContent='Ready';log('Round reset.');
+  }
+  // Animation time remains real time; the server tick loop is separate to measure interval stability.
+  let last=performance.now();
+  function animateTime(){
+    const now=performance.now(); if(state.running) state.t+=now-last; last=now;
+    requestAnimationFrame(animateTime);
+  }
+  $('startBtn').addEventListener('click',start);
+  $('pauseBtn').addEventListener('click',pause);
+  $('resetBtn').addEventListener('click',reset);
+  $('clearBtn').addEventListener('click',()=>{state.totalShots=0;state.hits=0;state.errors=[];state.events=[];state.pending=[];state.tickIntervals=[];renderEvents();updateStats();log('Measurements cleared; current simulation continues.');});
+  $('exportBtn').addEventListener('click',()=>{
+    const rows=[['mode','simulated_delay_ms','click_x','click_y','result','spatial_error_px','latency_setting_ms','jitter_setting_ms','packet_loss_percent']];
+    state.events.slice().reverse().forEach(e=>rows.push([e.mode,e.delay,e.clickX.toFixed(2),e.clickY.toFixed(2),e.result,e.error===null?'':e.error.toFixed(2),e.settings.latency,e.settings.jitter,e.settings.loss*100]));
+    const csv=rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(',')).join('\n');
+    const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='networklab-arena-shots.csv';a.click();URL.revokeObjectURL(url);
+  });
+  $('mode').addEventListener('change',()=>{
+    $('modeInfo').innerHTML=$('mode').value==='rewind'
+      ?'<strong>Lag-compensated rewind:</strong> validate against the target position at the recorded click timestamp, using the rolling one-second history buffer.'
+      :'<strong>Uncompensated:</strong> validate the shot against the server target position when the simulated packet arrives.';
+    log('Netcode mode changed to '+$('mode').value+'.');
+  });
+  [['latency','latencyVal',v=>v+' ms'],['jitterRange','jitterVal',v=>v+' ms'],['loss','lossVal',v=>v+'%'],['speed','speedVal',v=>Number(v).toFixed(1)+'×'],['radius','radiusVal',v=>v+' px']].forEach(([id,label,fmt])=>{
+    $(id).addEventListener('input',()=>$(label).textContent=fmt($(id).value));
+  });
+  canvas.addEventListener('click',onShot);
+  pushHistory(performance.now());requestAnimationFrame(draw);requestAnimationFrame(animateTime);updateStats();
+})();
+</script>
+</body>
+</html>
